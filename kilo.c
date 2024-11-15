@@ -12,15 +12,19 @@ void disableRawMode()
   tcsetattr(STDIN_FILENO, TCSAFLUSH, &orig_termios);
 }
 
-// turn off echo (output user input) and canonical (read byte
-// by byte instead of line by line) flag while using raw mode
+// turn off while using raw mode:
+// - echo (output user input)
+// - canonical mode (read byte by byte instead of line by line)
+// - signal interrupts (ctrl-c, ctrl-z)
+// - software flow ctrl (IXON, ctrl-s stops data transmitted until ctrl-q pressed)
 void enableRawMode()
 {
   tcgetattr(STDIN_FILENO, &orig_termios);
   atexit(disableRawMode);
 
   struct termios raw = orig_termios;
-  raw.c_lflag &= ~(ECHO | ICANON);
+  raw.c_lflag &= ~(IXON);
+  raw.c_lflag &= ~(ECHO | ICANON | ISIG);
 
   tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
 }
