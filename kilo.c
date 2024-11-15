@@ -22,15 +22,21 @@ void disableRawMode()
 // - canonical mode (read byte by byte instead of line by line)
 // - input str literals (IEXTEN, some systems allow you to type ctr-v to type str literal chars)
 // - signal interrupts (ctrl-c, ctrl-z)
+
+// - Misc flags: BRKINT, INPCK, ISTRIP, CS8 typically do not apply to modern terminal emulators but we turn them off in case
 void enableRawMode()
 {
   tcgetattr(STDIN_FILENO, &orig_termios);
   atexit(disableRawMode);
 
   struct termios raw = orig_termios;
-  raw.c_iflag &= ~(ICRNL | IXON);
+  raw.c_iflag &= ~(BRKINT | ICRNL | INPCK | ISTRIP | IXON);
   raw.c_oflag &= ~(OPOST);
+  raw.c_cflag |= (CS8);
   raw.c_lflag &= ~(ECHO | ICANON | IEXTEN | ISIG);
+
+  raw.c_cc[VMIN] = 0;  // min chars input before read() can return
+  raw.c_cc[VTIME] = 1; // read() waits 100ms for input
 
   tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
 }
@@ -39,18 +45,20 @@ int main()
 {
   enableRawMode();
 
-  char c;
-  while (read(STDIN_FILENO, &c, 1) == 1 && c != 'q')
+  while (1)
   {
-    // print control keypresses (arrows, backspace, etc.)
+    char c = '\0';
+    read(STDIN_FILENO, &c, 1);
     if (iscntrl(c))
     {
-      printf("%d\n", c);
+      printf("%d\r\n", c);
     }
     else
     {
-      printf("%d ('%c')\n", c, c);
+      printf("%d ('%c')\r\n", c, c);
     }
+    if (c == 'q')
+      break;
   };
   return 0;
 }
