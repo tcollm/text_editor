@@ -1,15 +1,33 @@
+/*** includes ***/
+
 #include <ctype.h>
+#include <errno.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <termios.h>
 #include <unistd.h>
 
+/*** data ***/
+
+struct termios orig_termios;
+
+/*** terminal ***/
+
+// handle errors
+void die(const char *s)
+{
+  perror(s); // print err desc
+  exit(1);
+}
+
 // create original terminal attr,
 // so that they can be reset when we're done with raw mode
-struct termios orig_termios;
 void disableRawMode()
 {
-  tcsetattr(STDIN_FILENO, TCSAFLUSH, &orig_termios);
+  if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &orig_termios) == -1)
+  {
+    die("tcsetattr");
+  }
 }
 
 // turn off while using raw mode:
@@ -26,7 +44,10 @@ void disableRawMode()
 // - Misc flags: BRKINT, INPCK, ISTRIP, CS8 typically do not apply to modern terminal emulators but we turn them off in case
 void enableRawMode()
 {
-  tcgetattr(STDIN_FILENO, &orig_termios);
+  if (tcgetattr(STDIN_FILENO, &orig_termios) == -1)
+  {
+    die("tcgetattr");
+  }
   atexit(disableRawMode);
 
   struct termios raw = orig_termios;
@@ -35,11 +56,17 @@ void enableRawMode()
   raw.c_cflag |= (CS8);
   raw.c_lflag &= ~(ECHO | ICANON | IEXTEN | ISIG);
 
+  // read() timeout:
   raw.c_cc[VMIN] = 0;  // min chars input before read() can return
   raw.c_cc[VTIME] = 1; // read() waits 100ms for input
 
-  tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
+  if (tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw) == -1)
+  {
+    die("tcsetattr");
+  }
 }
+
+/*** init ***/
 
 int main()
 {
@@ -48,7 +75,10 @@ int main()
   while (1)
   {
     char c = '\0';
-    read(STDIN_FILENO, &c, 1);
+    if (read(STDIN_FILENO, &c, 1) == -1 && errno != EAGAIN) // ignore EAGAIN, an errno from read() timing out
+    {
+      die("read");
+    }
     if (iscntrl(c))
     {
       printf("%d\r\n", c);
